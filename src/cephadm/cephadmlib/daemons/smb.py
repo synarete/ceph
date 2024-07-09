@@ -58,6 +58,7 @@ class Config:
     smb_port: int
     ceph_config_entity: str
     vhostname: str
+    smbmetrics_image: str
 
     def __init__(
         self,
@@ -74,6 +75,7 @@ class Config:
         smb_port: int = 0,
         ceph_config_entity: str = 'client.admin',
         vhostname: str = '',
+        smbmetrics_image: str = '',
     ) -> None:
         self.instance_id = instance_id
         self.source_config = source_config
@@ -87,6 +89,7 @@ class Config:
         self.smb_port = smb_port
         self.ceph_config_entity = ceph_config_entity
         self.vhostname = vhostname
+        self.smbmetrics_image = smbmetrics_image
 
     def __str__(self) -> str:
         return (
@@ -115,8 +118,10 @@ class SambaContainerCommon:
     def __init__(
         self,
         cfg: Config,
+        image: str = ''
     ) -> None:
         self.cfg = cfg
+        self.image = image
 
     def name(self) -> str:
         raise NotImplementedError('samba container name')
@@ -143,6 +148,9 @@ class SambaContainerCommon:
 
     def container_args(self) -> List[str]:
         return []
+
+    def container_image(self) -> str:
+        return self.image
 
 
 class SMBDContainer(SambaContainerCommon):
@@ -199,6 +207,14 @@ class ConfigWatchContainer(SambaContainerCommon):
         return super().args() + ['update-config', '--watch']
 
 
+class SmbmetricsContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'smbmetrics'
+
+    def args(self) -> List[str]:
+        return []
+
+
 class ContainerLayout:
     init_containers: List[SambaContainerCommon]
     primary: SambaContainerCommon
@@ -251,6 +267,7 @@ class SMB(ContainerDaemonForm):
         files = data_utils.dict_get(configs, 'files', {})
         ceph_config_entity = configs.get('config_auth_entity', '')
         vhostname = configs.get('virtual_hostname', '')
+        smbmetrics_image = configs.get('smbmetrics_image', '')
 
         if not instance_id:
             raise Error('invalid instance (cluster) id')
@@ -283,6 +300,7 @@ class SMB(ContainerDaemonForm):
             smb_port=self.smb_port,
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
+            smbmetrics_image=smbmetrics_image,
         )
         self._files = files
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
@@ -330,6 +348,10 @@ class SMB(ContainerDaemonForm):
         if self._cfg.domain_member:
             init_ctrs.append(MustJoinContainer(self._cfg))
             ctrs.append(WinbindContainer(self._cfg))
+
+        smbmetrics_image = self._cfg.smbmetrics_image
+        if smbmetrics_image:
+            ctrs.append(SmbmetricsContainer(self._cfg, smbmetrics_image))
 
         smbd = SMBDContainer(self._cfg)
         self._cached_layout = ContainerLayout(init_ctrs, smbd, ctrs)
@@ -382,10 +404,11 @@ class SMB(ContainerDaemonForm):
         identity = DaemonSubIdentity.from_parent(
             self.identity, smb_ctr.name()
         )
+        img = smb_ctr.container_image() or ctx.image or self.default_image
         return SidecarContainer(
             ctx,
             entrypoint='',
-            image=ctx.image or self.default_image,
+            image=img,
             identity=identity,
             container_args=container_args,
             args=smb_ctr.args(),

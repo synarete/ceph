@@ -144,6 +144,7 @@ DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
 DEFAULT_NGINX_IMAGE = 'quay.io/ceph/nginx:1.26.1'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_SAMBA_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
+DEFAULT_SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:v0.5'
 # ------------------------------------------------------------------------------
 
 
@@ -309,6 +310,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_samba',
             default=DEFAULT_SAMBA_IMAGE,
             desc='Samba/SMB container image',
+        ),
+        Option(
+            'container_image_samba_metrics',
+            default=DEFAULT_SAMBA_METRICS_IMAGE,
+            desc='Samba/SMB metrics exporter container image',
         ),
         Option(
             'warn_on_stray_hosts',
@@ -576,6 +582,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_jaeger_collector = ''
             self.container_image_jaeger_query = ''
             self.container_image_samba = ''
+            self.container_image_samba_metrics = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
