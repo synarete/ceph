@@ -2626,6 +2626,53 @@ TEST(LibCephFS, LookupVino) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, LookupAtRoot) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  UserPerm *perms = ceph_mount_perms(cmount);
+  Inode *root = nullptr;
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_ll_walk(cmount, ".", &root, &stx, CEPH_STATX_INO, 0, perms), 0);
+
+  inodeno_t ino;
+  ino.val = stx.stx_ino;
+  Inode *inode1 = nullptr;
+  ASSERT_EQ(ceph_ll_lookup_inode(cmount, ino, &inode1), 0);
+
+  Inode *inode2 = nullptr;
+  ASSERT_EQ(ceph_ll_lookup(cmount, inode1, ".", &inode2, &stx, CEPH_STATX_INO, 0, perms), 0);
+
+  Fh *fh2 = NULL;
+  ASSERT_EQ(ceph_ll_open(cmount, inode2, O_DIRECTORY | O_RDONLY | O_PATH, &fh2, perms), 0);
+
+  Inode *inode3 = nullptr;
+  ASSERT_EQ(ceph_ll_lookup(cmount, inode2, ".", &inode3, &stx, CEPH_STATX_INO, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_close(cmount, fh2), 0);
+
+  Fh *fh3 = NULL;
+  ASSERT_EQ(ceph_ll_open(cmount, inode3, O_DIRECTORY | O_RDONLY, &fh3, perms), 0);
+  ASSERT_EQ(ceph_ll_close(cmount, fh3), 0);
+
+  char snap_path[256];
+  sprintf(snap_name, "snap0_%d", getpid());
+  ASSERT_EQ(0, ceph_mksnap(cmount, "/", snap_name, 0755, nullptr, 0));
+
+  Inode *inode4 = nullptr;
+  ASSERT_EQ(ceph_ll_lookup(cmount, inode1, ".", &inode4, &stx, CEPH_STATX_INO, 0, perms), 0);
+
+  // Cleanups
+  ceph_ll_put(cmount, inode1);
+  ceph_ll_put(cmount, inode2);
+  ceph_ll_put(cmount, inode3);
+  ceph_ll_put(cmount, inode4);
+  ASSERT_EQ(0, ceph_rmsnap(cmount, "/", snap_name));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Openat) {
   pid_t mypid = getpid();
   struct ceph_mount_info *cmount;
